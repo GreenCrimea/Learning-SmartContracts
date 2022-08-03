@@ -319,47 +319,37 @@ blockchain = Blockchain()
 cryptography = Cryptography()
 
 
+@app.route("/mine_block.html")
+def serve_mine_block():
+    return render_template('mine_block.html')
+
+
 @app.route("/mine_block", methods=["POST"])
 def mine_block():
-    '''
-    POST command formatted as application/json:
-    {
-        "wallet", "wallet",
-    }
-    '''
-    json = request.get_json(force=True, silent=True, cache=False)
-    wallet = str(json.get("wallet"))
+    data = request.form
+    wallet = data['wallet']
     previous_block = blockchain.get_previous_block()
     previous_proof = previous_block["proof"]
     proof = blockchain.proof_of_work(previous_proof, wallet)
     previous_hash = blockchain.hash(previous_block)
     block = blockchain.create_block(proof, previous_hash)
-    response = {"message": "Congratulations, your block has been mined and added to the Botanical Chain.",
-                "index": block["index"],
-                "timestamp": block["timestamp"],
-                "proof": block["proof"],
-                "previous_hash": block["previous_hash"],
-                "contracts": block['contracts']}
-    return jsonify(response), 200
+    return render_template('block_mined.html', index=block['index'], timestamp=block['timestamp'], proof=block['proof'], previous_hash=block['previous_hash'], contracts=block['contracts'])
 
 
-@app.route("/get_chain", methods=["GET"])
+@app.route("/get_chain.html")
 def get_chain():
-    """request the current chain"""
-    response = {"chain": blockchain.chain,
-                "length": len(blockchain.chain)}
-    return jsonify(response), 200
+    return render_template('get_chain.html', chain=blockchain.chain, length=len(blockchain.chain))
 
 
-@app.route("/is_valid", methods=["GET"])
+@app.route("/is_valid.html")
 def is_valid():
     """request if the current chain is valid"""
     is_valid = blockchain.is_chain_valid(blockchain.chain)
     if is_valid:
-        response = {"message": "This nodes Botanical Chain is currently valid"}
+        response = 'VALID'
     else:
-        response = {"message": f"This nodes Botanical Chain is *****INVALID*****"}
-    return jsonify(response), 200
+        response = 'NOT VALID'
+    return render_template('is_valid.html', response=response)
 
 
 @app.route("/connect_node", methods=["POST"])
@@ -558,6 +548,7 @@ def get_mempool():
     response = {"mempool": blockchain.contracts}
     return jsonify(response), 200
 
+
 @app.route("/")
 def serve_index():
     return render_template('index.html')
@@ -566,6 +557,14 @@ def serve_index():
 @app.route("/test.html")
 def serve_test():
     return render_template('test.html')
+
+
+@app.route('/post_form', methods=['POST'])
+def process_form():
+    data = request.form
+    print(data['username'])
+    print(data['password'])    
+    return data
 
 
 app.run (host="0.0.0.0", port=5000, debug=True)      # change port to run multiple instances on a single machine for development
