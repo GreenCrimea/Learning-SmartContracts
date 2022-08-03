@@ -22,6 +22,8 @@ from threading import Timer
 from hashlib import sha512
 from Crypto.PublicKey import RSA
 from Crypto import Random
+from Crypto.Signature import pkcs1_15
+from Crypto import Hash
 
 
 this_node = "192.168.143.120:5000"
@@ -198,15 +200,16 @@ class Blockchain:
 class Cryptography:
     
     def __init__(self):
-        self.wallet_index = 1
-        self.mining_wallet = 0
+        pass
+
 
     def generate_wallet(self, passphrase):
         key = self.generate_RSA_keypair(passphrase)
-        return self.get_wallet(key), key.export_key(), key.publickey().export_key(), (self.wallet_index - 1)
+        return self.get_wallet(key), key.export_key(), key.publickey().export_key()
+
 
     def get_wallet_address(self, passphrase):
-        wallet, public_key, private_key, self.mining_wallet = self.generate_wallet(passphrase)
+        wallet, public_key, private_key = self.generate_wallet(passphrase)
         return wallet 
         
 
@@ -216,22 +219,37 @@ class Cryptography:
 
     def generate_RSA_keypair(self, passphrase):
         key = RSA.generate(2048)
+        wallet = self.get_wallet(key)
         private_key = key.export_key(passphrase=passphrase)
-        file_out = open(f"private-{self.wallet_index}.pem", "wb")
+        file_out = open(f"keys/{wallet}-private.pem", "wb")
         file_out.write(private_key)
         file_out.close()
 
         public_key = key.publickey().export_key()
-        file_out = open(f"receiver-{self.wallet_index}.pem", "wb")
+        file_out = open(f"keys/{wallet}-public.pem", "wb")
         file_out.write(public_key)
         file_out.close()
-        self.wallet_index += 1
         return key
 
-    def get_keys_from_file(self, index, passphrase):
-        encoded_key = open(f"private-{index}.pem", "rb").read()
+
+    def get_keys_from_file(self, wallet, passphrase):
+        encoded_key = open(f"keys/{wallet}-private.pem", "rb").read()
         key = RSA.import_key(encoded_key,passphrase=passphrase)
-        return self.get_wallet(key), key.export_key(), key.publickey().export_key(), index
+        return self.get_wallet(key), key.export_key(), key.publickey().export_key()
+
+
+    def get_keys_from_wallet(self, wallet, passphrase):
+        encoded_key = open(f"keys/{wallet}-private.pem", "rb").read()
+        key = RSA.import_key(encoded_key,passphrase=passphrase)
+        return key
+
+
+    def sign_transaction(self, sender_key, reciever_wallet, amount, transaction_ID):
+        sender_wallet = self.get_wallet(sender_key)
+        string_to_sign = sender_wallet + reciever_wallet + str(amount) + transaction_ID
+        signature_object = pkcs1_15.new(sender_key)
+        hash = Hash.SHA256.new(string_to_sign.encode("utf8"))
+        return signature_object.sign(hash)
 
 
 class Contracts:
@@ -250,6 +268,18 @@ class Contracts:
                         'sender_wallet': protocol,
                         'sender_signature': signature,
                         'amount': reward
+                        }
+        return transaction
+
+    def send_coins(self, sender_keys, reciever_wallet, amount):
+        transaction_ID = Random.get_random_bytes(32).hex()
+        transaction = {
+                        'type': 'TRANSACTION',
+                        'transaction_ID': transaction_ID,
+                        'reciever_wallet': reciever_wallet,
+                        'sender_wallet': cryptography.get_wallet(sender_keys),
+                        'sender_signature': str(cryptography.sign_transaction(sender_keys, reciever_wallet, amount, transaction_ID).hex()),
+                        'amount': amount
                         }
         return transaction
 
@@ -443,11 +473,10 @@ def generate_wallet():
     '''
     json = request.get_json(force=True, silent=True, cache=False)
     passphrase = str(json.get("passphrase"))
-    wallet, private_key, public_key, index = cryptography.generate_wallet(passphrase)
+    wallet, private_key, public_key = cryptography.generate_wallet(passphrase)
     response = {"your_wallet_address": wallet,
                 "your_public_key": public_key.hex(),
                 "your_private_key": private_key.hex(),
-                "index": index,
                 "passphrase": passphrase}
     return jsonify(response), 200
 
@@ -462,12 +491,33 @@ def see_mining_wallet():
     '''
     json = request.get_json(force=True, silent=True, cache=False)
     passphrase = str(json.get("passphrase"))
-    wallet_index = cryptography.mining_wallet
-    wallet, private_key, public_key, index = cryptography.get_keys_from_file(wallet_index, passphrase)
+    mining_wallet = blockchain.mining_wallet
+    wallet, private_key, public_key = cryptography.get_keys_from_file(mining_wallet, passphrase)
     response = {"your_wallet_address": wallet,
                 "your_public_key": public_key.hex(),
-                "your_private_key": private_key.hex(),
-                "index": index}
+                "your_private_key": private_key.hex()
+                }
+    return jsonify(response), 200
+
+
+@app.route("/send_coins", methods=["POST"])
+def send_coins():
+    '''
+    POST command formatted as application/json:
+    {
+        "sender_wallet":    "sender_wallet", 
+        "passphrase":       "passphrase",
+        "reciever_wallet:   "reciever_wallet",
+        "amount":           number
+    }
+    '''
+    json = request.get_json(force=True, silent=True, cache=False)
+    sender_wallet = str(json.get("sender_wallet"))
+    passphrase = str(json.get("passphrase"))
+    reciever_wallet = str(json.get("reciever_wallet"))
+    amount = str(json.get("amount"))
+    sender_keys = cryptography.get_keys_from_wallet(sender_wallet, passphrase)
+    response = contracts.send_coins(sender_keys, reciever_wallet, amount)
     return jsonify(response), 200
 
 
