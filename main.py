@@ -96,7 +96,7 @@ class Blockchain:
         """returns the index number of the previous block in the chain"""
         return self.chain[-1]
 
-    def proof_of_work(self, previous_proof):
+    def proof_of_work(self, previous_proof, passphrase):
         """find golden hash and return the proof"""
         new_proof = 1
         check_proof = False
@@ -107,7 +107,7 @@ class Blockchain:
             else:
                 new_proof += 1
         if self.mining_wallet == '':
-            self.mining_wallet = cryptography.get_wallet_address()
+            self.mining_wallet = cryptography.get_wallet_address(passphrase)
             self.contracts.append(contracts.mining_reward(self.mining_wallet, self.mining_reward))
         else:
             self.contracts.append(contracts.mining_reward(self.mining_wallet, self.mining_reward))
@@ -201,12 +201,12 @@ class Cryptography:
         self.wallet_index = 1
         self.mining_wallet = 0
 
-    def generate_wallet(self):
-        key = self.generate_RSA_keypair()
+    def generate_wallet(self, passphrase):
+        key = self.generate_RSA_keypair(passphrase)
         return self.get_wallet(key), key.export_key(), key.publickey().export_key(), (self.wallet_index - 1)
 
-    def get_wallet_address(self):
-        wallet, public_key, private_key, self.mining_wallet = self.generate_wallet()
+    def get_wallet_address(self, passphrase):
+        wallet, public_key, private_key, self.mining_wallet = self.generate_wallet(passphrase)
         return wallet 
         
 
@@ -214,9 +214,9 @@ class Cryptography:
         return hashlib.sha256(key.publickey().export_key()).hexdigest()[:32]
 
 
-    def generate_RSA_keypair(self):
+    def generate_RSA_keypair(self, passphrase):
         key = RSA.generate(2048)
-        private_key = key.export_key()
+        private_key = key.export_key(passphrase=passphrase)
         file_out = open(f"private-{self.wallet_index}.pem", "wb")
         file_out.write(private_key)
         file_out.close()
@@ -228,9 +228,9 @@ class Cryptography:
         self.wallet_index += 1
         return key
 
-    def get_keys_from_file(self, index):
+    def get_keys_from_file(self, index, passphrase):
         encoded_key = open(f"private-{index}.pem", "rb").read()
-        key = RSA.import_key(encoded_key)
+        key = RSA.import_key(encoded_key,passphrase=passphrase)
         return self.get_wallet(key), key.export_key(), key.publickey().export_key(), index
 
 
@@ -264,12 +264,19 @@ blockchain = Blockchain()
 cryptography = Cryptography()
 
 
-@app.route("/mine_block", methods=["GET"])
+@app.route("/mine_block", methods=["POST"])
 def mine_block():
-    """Request to mine a block, collect mining reward and add block to this machines chain"""
+    '''
+    POST command formatted as application/json:
+    {
+        "passphrase":   "passphrase"
+    }
+    '''
+    json = request.get_json(force=True, silent=True, cache=False)
+    passphrase = str(json.get("passphrase"))
     previous_block = blockchain.get_previous_block()
     previous_proof = previous_block["proof"]
-    proof = blockchain.proof_of_work(previous_proof)
+    proof = blockchain.proof_of_work(previous_proof, passphrase)
     previous_hash = blockchain.hash(previous_block)
     block = blockchain.create_block(proof, previous_hash)
     response = {"message": "Congratulations, your block has been mined and added to the Botanical Chain.",
@@ -416,20 +423,47 @@ def see_nodes():
     return jsonify(response), 200
 
 
-@app.route("/generate_wallet", methods=["GET"])
+'''@app.route("/generate_wallet", methods=["GET"])
 def generate_wallet():
     wallet, private_key, public_key, index = cryptography.generate_wallet()
     response = {"your_wallet_address": wallet,
                 "your_public_key": public_key.hex(),
                 "your_private_key": private_key.hex(),
                 "index": index}
+    return jsonify(response), 200'''
+
+
+@app.route("/generate_wallet", methods=["POST"])
+def generate_wallet():
+    '''
+    POST command formatted as application/json:
+    {
+        "passphrase":   "passphrase"
+    }
+    '''
+    json = request.get_json(force=True, silent=True, cache=False)
+    passphrase = str(json.get("passphrase"))
+    wallet, private_key, public_key, index = cryptography.generate_wallet(passphrase)
+    response = {"your_wallet_address": wallet,
+                "your_public_key": public_key.hex(),
+                "your_private_key": private_key.hex(),
+                "index": index,
+                "passphrase": passphrase}
     return jsonify(response), 200
 
 
-@app.route("/see_mining_wallet", methods=["GET"])
+@app.route("/see_mining_wallet", methods=["POST"])
 def see_mining_wallet():
+    '''
+    POST command formatted as application/json:
+    {
+        "passphrase":   "passphrase"
+    }
+    '''
+    json = request.get_json(force=True, silent=True, cache=False)
+    passphrase = str(json.get("passphrase"))
     wallet_index = cryptography.mining_wallet
-    wallet, private_key, public_key, index = cryptography.get_keys_from_file(wallet_index)
+    wallet, private_key, public_key, index = cryptography.get_keys_from_file(wallet_index, passphrase)
     response = {"your_wallet_address": wallet,
                 "your_public_key": public_key.hex(),
                 "your_private_key": private_key.hex(),
