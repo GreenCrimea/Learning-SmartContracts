@@ -12,7 +12,6 @@ import datetime
 import hashlib
 import json
 from urllib import response
-import Crypto
 from flask import Flask, jsonify, request, render_template
 import requests
 from uuid import uuid4
@@ -21,10 +20,9 @@ from cryptography.fernet import Fernet
 from threading import Timer
 from hashlib import sha512
 from Crypto.PublicKey import RSA
-from Crypto import Random
+from Crypto import Random, Hash
 from Crypto.Signature import pkcs1_15
-from Crypto import Hash
-from secretstorage import create_collection
+import binascii
 
 
 this_node = "192.168.143.120:5000"
@@ -118,7 +116,7 @@ class Blockchain:
         return hashlib.sha256(encoded_block).hexdigest()
 
     def is_chain_valid(self, chain):
-        """check if the chain is valid by comparing the blocks previous hash value to the calculated previous hash"""
+        """check if the chain is valid by comparing the blocks previous hash value to the calculated previous hash, and checking contract signatures"""
         previous_block = chain[0]
         block_index = 1
         while block_index < len(chain):
@@ -132,10 +130,21 @@ class Blockchain:
                 return False
             previous_block = block
             block_index += 1
+
+        for i in range(len(chain)):
+            for a in range(len(chain[i]['contracts'])):
+                if chain[i]['contracts'][a]['sender_wallet'] != "00000000000000000000000000000000":
+                    key = cryptography.get_public_key_from_wallet(chain[i]['contracts'][a]['sender_wallet'])
+                    signature_object = pkcs1_15.new(key)  
+                    string_to_sign = chain[i]['contracts'][a]['sender_wallet'] + chain[i]['contracts'][a]['reciever_wallet'] + str(chain[i]['contracts'][a]['amount']) + chain[i]['contracts'][a]['transaction_ID']
+                    hash = Hash.SHA256.new(string_to_sign.encode("utf8"))
+                    try: 
+                        signature_object.verify(hash, binascii.unhexlify(chain[i]['contracts'][a]['sender_signature']))
+                        continue
+                    except ValueError:
+                        return False
         return True
 
-    def add_contract(self):
-        pass
 
     def add_node(self, address, new_node):
         """add the address of any nodes to the node set"""
@@ -241,12 +250,18 @@ class Cryptography:
         return key
 
 
+    def get_public_key_from_wallet(self, wallet):
+        encoded_key = open(f"keys/{wallet}-public.pem", "rb").read()
+        key = RSA.import_key(encoded_key)
+        return key
+
+
     def sign_transaction(self, sender_key, reciever_wallet, amount, transaction_ID):
         sender_wallet = self.get_wallet(sender_key)
         string_to_sign = sender_wallet + reciever_wallet + str(amount) + transaction_ID
         signature_object = pkcs1_15.new(sender_key)
         hash = Hash.SHA256.new(string_to_sign.encode("utf8"))
-        return signature_object.sign(hash)
+        return binascii.hexlify(signature_object.sign(hash)).decode('ascii')
 
 
 class Contracts:
@@ -276,7 +291,7 @@ class Contracts:
                         'transaction_ID': transaction_ID,
                         'reciever_wallet': reciever_wallet,
                         'sender_wallet': cryptography.get_wallet(sender_keys),
-                        'sender_signature': str(cryptography.sign_transaction(sender_keys, reciever_wallet, amount, transaction_ID).hex()),
+                        'sender_signature': cryptography.sign_transaction(sender_keys, reciever_wallet, amount, transaction_ID),
                         'amount': int(amount)
                         }
         blockchain.contracts.append(transaction)
@@ -518,6 +533,7 @@ def send_coins():
     amount = str(json.get("amount"))
     sender_keys = cryptography.get_keys_from_wallet(sender_wallet, passphrase)
     response = contracts.send_coins(sender_keys, reciever_wallet, amount)
+    response["sender_signature"] = str(response["sender_signature"])
     return jsonify(response), 200
 
 
@@ -533,6 +549,13 @@ def get_balance():
     wallet = str(json.get("wallet"))
     balance = contracts.get_balance(wallet)
     response = {"balance": balance}
+    return jsonify(response), 200
+
+
+@app.route("/get_mempool", methods=["GET"])
+def get_mempool():
+    """request the current mempool"""
+    response = {"mempool": blockchain.contracts}
     return jsonify(response), 200
 
 
