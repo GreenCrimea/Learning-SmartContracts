@@ -510,7 +510,7 @@ def generate_wallet():
     return render_template('new_wallet.html', wallet=wallet, public=public_key.hex(), private=private_key.hex(), passphrase=passphrase)
 
 
-@app.route('recieve_keys', methods=['POST'])
+@app.route('/recieve_keys', methods=['POST'])
 def recieve_keys():
     data = request.data.decode('utf-8')
     cryptography.generate_key_file(data['keys'], data['passphrase'])
