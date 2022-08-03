@@ -203,7 +203,7 @@ class Blockchain:
         node_length = len(list_of_nodes)
         if node_length > 1:
             for a in range(node_length):
-                deliver_to = "http://" + list_of_nodes[a] + "/add_mempool"
+                deliver_to = "http://" + list_of_nodes[a] + "add_mempool"
                 requests.post(url=deliver_to, data=transactions)
                 a += 1
 
@@ -460,13 +460,13 @@ def join_chain():
     blockchain.add_node(address=None, new_node=new_node)
     blockchain.propagate_node(new_node)
     response = {'address': this_node}
-    deliver_to = "http://" + new_node + "/add_mempool"
+    deliver_to = "http://" + new_node + "join_chain_int"
     requests.post(url=deliver_to, data=response)
     return render_template("chain_joined.html")
 
 
 @app.route("/join_chain_int", methods=['POST'])
-def join_chain():
+def join_chain_int():
     json = request.get_json(force=True, silent=True, cache=False)
     new_node = str(json.get("address"))
     blockchain.add_node(address=None, new_node=new_node)
