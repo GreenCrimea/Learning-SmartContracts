@@ -376,6 +376,12 @@ def get_chain():
     return render_template('get_chain.html', chain=blockchain.chain, length=len(blockchain.chain))
 
 
+@app.route("/get_chain", methods=["GET"])
+def get_chain_2():
+    response = {'chain': blockchain.chain, 'length': len(blockchain.chain)}
+    return jsonify(response), 200
+
+
 @app.route("/is_valid.html")
 def is_valid():
     """request if the current chain is valid"""
