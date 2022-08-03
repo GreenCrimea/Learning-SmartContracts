@@ -208,6 +208,17 @@ class Blockchain:
                 requests.post(url=deliver_to, data=transactions)
                 a += 1
 
+    def propagate_keys(self, keys, passphrase):
+        self.self_node()
+        list_of_nodes = tuple(self.node)
+        node_length = len(list_of_nodes)
+        data = {'keys': keys, 'passphrase': passphrase}
+        if node_length > 1:
+            for a in range(node_length):
+                deliver_to = "http://" + list_of_nodes[a] + "/recieve_keys"
+                requests.post(url=deliver_to, data=data)
+                a += 1
+
     def receive_propagation(self, node):
         """receive the nodes from other machines"""
         self.node.add(node)
@@ -236,6 +247,20 @@ class Cryptography:
 
     def generate_RSA_keypair(self, passphrase):
         key = RSA.generate(2048)
+        wallet = self.get_wallet(key)
+        private_key = key.export_key(passphrase=passphrase)
+        file_out = open(f"keys/{wallet}-private.pem", "wb")
+        file_out.write(private_key)
+        file_out.close()
+
+        public_key = key.publickey().export_key()
+        file_out = open(f"keys/{wallet}-public.pem", "wb")
+        file_out.write(public_key)
+        file_out.close()
+        return key
+
+    
+    def generate_key_file(self, key, passphrase):
         wallet = self.get_wallet(key)
         private_key = key.export_key(passphrase=passphrase)
         file_out = open(f"keys/{wallet}-private.pem", "wb")
@@ -481,7 +506,15 @@ def generate_wallet():
     data = request.form
     passphrase = str(data["passphrase"])
     wallet, private_key, public_key = cryptography.generate_wallet(passphrase)
+    blockchain.propagate_keys(private_key, passphrase)
     return render_template('new_wallet.html', wallet=wallet, public=public_key.hex(), private=private_key.hex(), passphrase=passphrase)
+
+
+@app.route('recieve_keys', methods=['POST'])
+def recieve_keys():
+    data = request.data.decode('utf-8')
+    cryptography.generate_key_file(data['keys'], data['passphrase'])
+    return 200
 
 
 @app.route("/send_coins.html")
