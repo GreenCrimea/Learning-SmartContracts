@@ -24,7 +24,7 @@ from Crypto.Signature import pkcs1_15
 import binascii
 
 
-this_node = "192.168.143.120:5000"
+this_node = "192.168.1.102:5000"
 
 
 class RepeatedTimer(object):
@@ -376,12 +376,6 @@ def get_chain():
     return render_template('get_chain.html', chain=blockchain.chain, length=len(blockchain.chain))
 
 
-@app.route("/get_chain", methods=["GET"])
-def get_chain_2():
-    response = {'chain': blockchain.chain, 'length': len(blockchain.chain)}
-    return jsonify(response), 200
-
-
 @app.route("/is_valid.html")
 def is_valid():
     """request if the current chain is valid"""
@@ -463,6 +457,18 @@ def join():
 def join_chain():
     data = request.form
     new_node = str(data['address'])
+    blockchain.add_node(address=None, new_node=new_node)
+    blockchain.propagate_node(new_node)
+    response = {'address': this_node}
+    deliver_to = "http://" + new_node + "/add_mempool"
+    requests.post(url=deliver_to, data=response)
+    return render_template("chain_joined.html")
+
+
+@app.route("/join_chain_int", methods=['POST'])
+def join_chain():
+    json = request.get_json(force=True, silent=True, cache=False)
+    new_node = str(json.get("address"))
     blockchain.add_node(address=None, new_node=new_node)
     blockchain.propagate_node(new_node)
     return render_template("chain_joined.html")
