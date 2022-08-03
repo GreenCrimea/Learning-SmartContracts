@@ -24,6 +24,7 @@ from Crypto.PublicKey import RSA
 from Crypto import Random
 from Crypto.Signature import pkcs1_15
 from Crypto import Hash
+from secretstorage import create_collection
 
 
 this_node = "192.168.143.120:5000"
@@ -66,7 +67,6 @@ class Blockchain:
         self.create_block(proof=1, previous_hash='0')
         self.difficulty_value = 6
         self.node = set()
-        self.mining_wallet = ''
         self.mining_reward = 1000
 
 
@@ -83,7 +83,7 @@ class Blockchain:
             "previous_hash": previous_hash,
             "contracts" : self.contracts
         }
-        self.transactions = []
+        self.contracts = []
         self.chain.append(block)
         return block
 
@@ -98,7 +98,7 @@ class Blockchain:
         """returns the index number of the previous block in the chain"""
         return self.chain[-1]
 
-    def proof_of_work(self, previous_proof, passphrase):
+    def proof_of_work(self, previous_proof, wallet):
         """find golden hash and return the proof"""
         new_proof = 1
         check_proof = False
@@ -108,11 +108,8 @@ class Blockchain:
                 check_proof = True
             else:
                 new_proof += 1
-        if self.mining_wallet == '':
-            self.mining_wallet = cryptography.get_wallet_address(passphrase)
-            self.contracts.append(contracts.mining_reward(self.mining_wallet, self.mining_reward))
-        else:
-            self.contracts.append(contracts.mining_reward(self.mining_wallet, self.mining_reward))
+
+        contracts.mining_reward(wallet, self.mining_reward)
         return new_proof
 
     def hash(self, block):
@@ -269,6 +266,7 @@ class Contracts:
                         'sender_signature': signature,
                         'amount': reward
                         }
+        blockchain.contracts.append(transaction)
         return transaction
 
     def send_coins(self, sender_keys, reciever_wallet, amount):
@@ -279,9 +277,21 @@ class Contracts:
                         'reciever_wallet': reciever_wallet,
                         'sender_wallet': cryptography.get_wallet(sender_keys),
                         'sender_signature': str(cryptography.sign_transaction(sender_keys, reciever_wallet, amount, transaction_ID).hex()),
-                        'amount': amount
+                        'amount': int(amount)
                         }
+        blockchain.contracts.append(transaction)
         return transaction
+
+
+    def get_balance(self, wallet):
+        balance = 0
+        for i in range(len(blockchain.chain)):
+            for a in range(len(blockchain.chain[i]['contracts'])):
+                if blockchain.chain[i]['contracts'][a]['sender_wallet'] == wallet:
+                    balance -= blockchain.chain[i]['contracts'][a]['amount']
+                if blockchain.chain[i]['contracts'][a]['reciever_wallet'] == wallet:
+                    balance += blockchain.chain[i]['contracts'][a]['amount']
+        return balance
 
 
 app = Flask(__name__, template_folder='template')
@@ -299,14 +309,14 @@ def mine_block():
     '''
     POST command formatted as application/json:
     {
-        "passphrase":   "passphrase"
+        "wallet", "wallet",
     }
     '''
     json = request.get_json(force=True, silent=True, cache=False)
-    passphrase = str(json.get("passphrase"))
+    wallet = str(json.get("wallet"))
     previous_block = blockchain.get_previous_block()
     previous_proof = previous_block["proof"]
-    proof = blockchain.proof_of_work(previous_proof, passphrase)
+    proof = blockchain.proof_of_work(previous_proof, wallet)
     previous_hash = blockchain.hash(previous_block)
     block = blockchain.create_block(proof, previous_hash)
     response = {"message": "Congratulations, your block has been mined and added to the Botanical Chain.",
@@ -453,16 +463,6 @@ def see_nodes():
     return jsonify(response), 200
 
 
-'''@app.route("/generate_wallet", methods=["GET"])
-def generate_wallet():
-    wallet, private_key, public_key, index = cryptography.generate_wallet()
-    response = {"your_wallet_address": wallet,
-                "your_public_key": public_key.hex(),
-                "your_private_key": private_key.hex(),
-                "index": index}
-    return jsonify(response), 200'''
-
-
 @app.route("/generate_wallet", methods=["POST"])
 def generate_wallet():
     '''
@@ -520,6 +520,20 @@ def send_coins():
     response = contracts.send_coins(sender_keys, reciever_wallet, amount)
     return jsonify(response), 200
 
+
+@app.route("/get_balance", methods=["POST"])
+def get_balance():
+    '''
+    POST command formatted as application/json:
+    {
+        "wallet": "wallet"
+    }
+    '''
+    json = request.get_json(force=True, silent=True, cache=False)
+    wallet = str(json.get("wallet"))
+    balance = contracts.get_balance(wallet)
+    response = {"balance": balance}
+    return jsonify(response), 200
 
 
 app.run (host="0.0.0.0", port=5000)      # change port to run multiple instances on a single machine for development
