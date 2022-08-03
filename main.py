@@ -16,7 +16,6 @@ from flask import Flask, jsonify, request, render_template
 import requests
 from uuid import uuid4
 from urllib.parse import urlparse
-from cryptography.fernet import Fernet
 from threading import Timer
 from hashlib import sha512
 from Crypto.PublicKey import RSA
@@ -510,7 +509,7 @@ def generate_wallet():
     return render_template('new_wallet.html', wallet=wallet, public=public_key.hex(), private=private_key.hex(), passphrase=passphrase)
 
 
-@app.route('recieve_keys', methods=['POST'])
+@app.route('/recieve_keys', methods=['POST'])
 def recieve_keys():
     data = request.data.decode('utf-8')
     cryptography.generate_key_file(data['keys'], data['passphrase'])
