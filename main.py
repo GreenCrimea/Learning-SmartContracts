@@ -24,7 +24,7 @@ from Crypto.Signature import pkcs1_15
 import binascii
 
 
-this_node = "192.168.1.102:5000"
+this_node = "192.168.1.107:5000"
 
 
 class RepeatedTimer(object):
