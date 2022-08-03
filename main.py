@@ -398,8 +398,8 @@ def connect_node():
                     "http://192.168.1.3:5002/",]
     }
     """
-    json = request.get_json(force=True, silent=True, cache=False)
-    nodes = json.get("nodes")
+    data = request.form
+    nodes = data['address']
     if nodes is None:
         return "No Node", 400
     for nodes in nodes:
@@ -453,7 +453,7 @@ def join():
     return render_template('join.html')
 
 
-@app.route("/join_chain")
+@app.route("/join_chain", methods=['POST'])
 def join_chain():
     data = request.form
     new_node = str(data['address'])
