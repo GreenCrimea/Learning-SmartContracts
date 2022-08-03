@@ -196,6 +196,17 @@ class Blockchain:
                 deliver_to = "http://" + list_of_nodes[a] + "/receive_propagation"
                 requests.post(url=deliver_to, data=node)
                 a += 1
+                
+    def propagate_mempool(self, transactions):
+        """propagate this machines mempool"""
+        self.self_node()
+        list_of_nodes = tuple(self.node)
+        node_length = len(list_of_nodes)
+        if node_length > 1:
+            for a in range(node_length):
+                deliver_to = "http://" + list_of_nodes[a] + "/add_mempool"
+                requests.post(url=deliver_to, data=transactions)
+                a += 1
 
     def receive_propagation(self, node):
         """receive the nodes from other machines"""
@@ -400,8 +411,8 @@ def propagate_nodes_timer():
     print("Nodes have successfully propagated")
 
 
-print("starting propagation timer, checking every 5 minutes")
-rt_one = RepeatedTimer(300, propagate_nodes_timer)
+print("starting propagation timer, checking every minute")
+rt_one = RepeatedTimer(60, propagate_nodes_timer)
 
 
 @app.route("/receive_propagation", methods=["POST"])
@@ -413,25 +424,18 @@ def receive_propagation():
     return jsonify(response), 201
 
 
-@app.route("/join_chain", methods=["POST"])
+@app.route("/join.html")
+def join():
+    return render_template('join.html')
+
+
+@app.route("/join_chain")
 def join_chain():
-    """
-    join the chain by sending your current address.
-    POST command formatted as application/json:
-    {
-        "address":   ["http://192.168.1.3:5000/"]
-    }
-    """
-    json = request.get_json(force=True, silent=True, cache=False)
-    new_node = str(json.get("address"))
-    new_node = new_node.replace("[", "")
-    new_node = new_node.replace("]", "")
-    new_node = new_node.replace("'", "")
-    new_node = new_node.replace("'", "")
+    data = request.form
+    new_node = str(data['address'])
     blockchain.add_node(address=None, new_node=new_node)
     blockchain.propagate_node(new_node)
-    response = {"message": "You have successfully joined the botanical chain"}
-    return jsonify(response), 201
+    return render_template("chain_joined.html")
 
 
 @app.route("/replace_chain", methods=["GET"])
@@ -456,57 +460,37 @@ def replace_chain_timer():
         print(f"The current chain is the longest.")
 
 
-print("starting consensus timer, checking every 1 minute")
-rt_two = RepeatedTimer(60, replace_chain_timer)
+print("starting consensus timer, checking every 15 seconds")
+rt_two = RepeatedTimer(15, replace_chain_timer)
 
 
-@app.route("/see_nodes", methods=["GET"])
+@app.route("/see_nodes.html")
 def see_nodes():
     """return the nodes in this machines list"""
     nodes = list(blockchain.node)
-    response = {"message": nodes}
-    return jsonify(response), 200
+    return render_template('see_nodes.html', nodes=nodes)
+
+
+@app.route("/generate_wallet.html")
+def generate():
+    return render_template('generate_wallet.html')
 
 
 @app.route("/generate_wallet", methods=["POST"])
 def generate_wallet():
-    '''
-    POST command formatted as application/json:
-    {
-        "passphrase":   "passphrase"
-    }
-    '''
-    json = request.get_json(force=True, silent=True, cache=False)
-    passphrase = str(json.get("passphrase"))
+    data = request.form
+    passphrase = str(data["passphrase"])
     wallet, private_key, public_key = cryptography.generate_wallet(passphrase)
-    response = {"your_wallet_address": wallet,
-                "your_public_key": public_key.hex(),
-                "your_private_key": private_key.hex(),
-                "passphrase": passphrase}
-    return jsonify(response), 200
+    return render_template('new_wallet.html', wallet=wallet, public=public_key.hex(), private=private_key.hex(), passphrase=passphrase)
 
 
-@app.route("/see_mining_wallet", methods=["POST"])
-def see_mining_wallet():
-    '''
-    POST command formatted as application/json:
-    {
-        "passphrase":   "passphrase"
-    }
-    '''
-    json = request.get_json(force=True, silent=True, cache=False)
-    passphrase = str(json.get("passphrase"))
-    mining_wallet = blockchain.mining_wallet
-    wallet, private_key, public_key = cryptography.get_keys_from_file(mining_wallet, passphrase)
-    response = {"your_wallet_address": wallet,
-                "your_public_key": public_key.hex(),
-                "your_private_key": private_key.hex()
-                }
-    return jsonify(response), 200
+@app.route("/send_coins.html")
+def coins():
+    return render_template('send_coins.html')
 
 
-@app.route("/send_coins", methods=["POST"])
-def send_coins():
+@app.route("/add_mempool", methods=["POST"])
+def add_mempool():
     '''
     POST command formatted as application/json:
     {
@@ -524,7 +508,41 @@ def send_coins():
     sender_keys = cryptography.get_keys_from_wallet(sender_wallet, passphrase)
     response = contracts.send_coins(sender_keys, reciever_wallet, amount)
     response["sender_signature"] = str(response["sender_signature"])
-    return jsonify(response), 200
+    return 200
+
+
+@app.route("/send_coins", methods=["POST"])
+def send_coins():
+    '''
+    POST command formatted as application/json:
+    {
+        "sender_wallet":    "sender_wallet", 
+        "passphrase":       "passphrase",
+        "reciever_wallet:   "reciever_wallet",
+        "amount":           number
+    }
+    '''
+    data = request.form
+    sender_wallet = str(data["sender_wallet"])
+    passphrase = str(data["passphrase"])
+    reciever_wallet = str(data["reciever_wallet"])
+    amount = str(data["amount"])
+    sender_keys = cryptography.get_keys_from_wallet(sender_wallet, passphrase)
+    response = contracts.send_coins(sender_keys, reciever_wallet, amount)
+    response["sender_signature"] = str(response["sender_signature"])
+    transaction = {
+                    'sender_wallet': sender_wallet,
+                    'passphrase': passphrase,
+                    'reciever_wallet': reciever_wallet,
+                    'amount': amount
+                    }
+    blockchain.propagate_mempool(transaction)
+    return render_template('transaction_successful.html', type=response['type'], ID=response['transaction_ID'], reciever_wallet=response['reciever_wallet'], sender_wallet=response['sender_wallet'], sender_signature=response['sender_signature'], amount=str(response['amount']))
+
+
+@app.route("/balance.html")
+def balance():
+    return render_template('balance.html')
 
 
 @app.route("/get_balance", methods=["POST"])
@@ -535,11 +553,10 @@ def get_balance():
         "wallet": "wallet"
     }
     '''
-    json = request.get_json(force=True, silent=True, cache=False)
-    wallet = str(json.get("wallet"))
+    data = request.form
+    wallet = str(data["wallet"])
     balance = contracts.get_balance(wallet)
-    response = {"balance": balance}
-    return jsonify(response), 200
+    return render_template('get_balance.html', wallet=wallet, balance=balance)
 
 
 @app.route("/get_mempool", methods=["GET"])

@@ -1,0 +1,25 @@
+<html>
+  <head>
+    <title>Botanic Chain</title>
+  </head>
+  <body>
+    <h1>Send Coins</h1>
+    <form action="/send_coins" enctype="multipart/form-data" method="POST"> 
+        <br>
+        <label for="sender_wallet">sender wallet</label><br>
+        <input type="text" id="sender_wallet" name="sender_wallet">
+        <br>
+        <label for="passphrase">passphrase</label><br>
+        <input type="text" id="passphrase" name="passphrase">
+        <br>
+        <label for="reciever_wallet">reciever wallet</label><br>
+        <input type="text" id="reciever_wallet" name="reciever_wallet">
+        <br>
+        <label for="amount">amount</label><br>
+        <input type="text" id="amount" name="amount">
+        <input type="submit" value="Submit">
+        <br><br><br>
+        <a href="/">return home</a>
+    </form>
+  </body>
+</html>
