@@ -460,7 +460,7 @@ def join_chain():
     blockchain.add_node(address=None, new_node=new_node)
     blockchain.propagate_node(new_node)
     response = {'address': this_node}
-    deliver_to = "http://" + new_node + "join_chain_int"
+    deliver_to = new_node + "join_chain_int"
     requests.post(url=deliver_to, data=response)
     return render_template("chain_joined.html")
 
