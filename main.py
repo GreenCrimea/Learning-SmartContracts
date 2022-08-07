@@ -8,6 +8,7 @@ ALPHA v0.1
 Updated Botanical blockchain including working cryptography, wallets, transactions, and smartcontracts
 '''
 
+from crypt import methods
 import datetime
 import hashlib
 import json
@@ -24,7 +25,7 @@ from Crypto.Signature import pkcs1_15
 import binascii
 
 
-this_node = "192.168.1.102:5000"
+this_node = "http://192.168.1.102:5000"
 
 
 class RepeatedTimer(object):
@@ -143,6 +144,53 @@ class Blockchain:
                     except ValueError:
                         return False
         return True
+
+    
+    def add_node(self, new_node):
+        if new_node == this_node:
+            pass
+        else:
+            self.node.add(new_node)
+
+    
+    def create_node_dict(self):
+        nodes = self.node
+        nodes.add(this_node)
+        node_dict = {"nodes": ""}
+        for i in range(len(nodes)):
+            node_dict["nodes"][i] = nodes[i]
+        return node_dict
+
+
+    def propagate_nodes(self):
+        node_dict = self.create_node_dict()
+        for i in range(len(self.node)):
+            post_to = f"{self.node[i]}recieve_nodes/"
+            requests.post(url=post_to, json=node_dict)
+
+
+    def consensus(self):
+        longest_chain = None
+        max_length = len(self.chain)
+        for i in range(len(self.node)):
+            get_from = f"{self.node[i]}/get_chain_json"
+            response = requests.get(url=get_from)
+            length = response.json()["length"]
+            chain = response.json()["chain"]
+            if length > max_length:
+                if self.is_chain_valid(chain):
+                    max_length = length
+                    longest_chain = chain
+        if len(longest_chain) > len(self.chain):
+            self.chain = longest_chain
+
+
+    def push_mempool(self, transaction):
+        post_data = {"transaction": transaction}
+        for i in range(len(self.node)):
+            push_to = f"{self.node[i]}/get_mempool"
+            requests.post(url=push_to, json=post_data)
+
 
 
 class Cryptography:
@@ -297,6 +345,20 @@ def get_chain():
     return render_template('get_chain.html', chain=blockchain.chain, length=len(blockchain.chain))
 
 
+@app.route("/get_chain_json", methods=['GET'])
+def get_chain_json():
+    response = {"chain": blockchain.chain, "length": len(blockchain.chain)}
+    return jsonify(response)
+
+
+@app.route("/get_mempool", methods=['POST'])
+def get_mempool():
+    json = request.get_json(force=True, silent=True, cache=False)
+    transactions = json.get("transaction")
+    for i in range(len(transactions)):
+        blockchain.contracts.append(transactions[i])
+
+
 @app.route("/is_valid.html")
 def is_valid():
     """request if the current chain is valid"""
@@ -308,8 +370,12 @@ def is_valid():
     return render_template('is_valid.html', response=response)
 
 
-#print("starting propagation timer, checking every minute")
-#rt_one = RepeatedTimer(60, propagate_nodes_timer)
+print("starting propagation timer, checking every minute")
+rt_one = RepeatedTimer(60, blockchain.propagate_nodes())
+
+
+print("starting consensus timer, checking every 15 seconds")
+rt_two = RepeatedTimer(15, blockchain.consensus())
 
 
 @app.route("/join.html")
@@ -321,16 +387,17 @@ def join():
 def join_chain():
     data = request.form
     new_node = str(data['address'])
-    blockchain.add_node(address=None, new_node=new_node)
-    blockchain.propagate_node(new_node)
-    response = {'address': this_node}
-    deliver_to = new_node + "join_chain_int"
-    requests.post(url=deliver_to, data=response)
+    blockchain.add_node(new_node)
+    blockchain.propagate_nodes()
     return render_template("chain_joined.html")
 
 
-#print("starting consensus timer, checking every 15 seconds")
-#rt_two = RepeatedTimer(15, replace_chain_timer)
+@app.route("/recieve_nodes", methods=['POST'])
+def recieve_nodes():
+    json = request.get_json(force=True, silent=True, cache=False)
+    nodes = json.get("nodes")
+    for i in range(len(nodes)):
+        blockchain.add_node(nodes[i])
 
 
 @app.route("/see_nodes.html")
@@ -383,6 +450,7 @@ def send_coins():
                     'reciever_wallet': reciever_wallet,
                     'amount': amount
                     }
+    blockchain.push_mempool(transaction)
     return render_template('transaction_successful.html', type=response['type'], ID=response['transaction_ID'], reciever_wallet=response['reciever_wallet'], sender_wallet=response['sender_wallet'], sender_signature=response['sender_signature'], amount=str(response['amount']))
 
 
@@ -405,13 +473,6 @@ def get_balance():
     return render_template('get_balance.html', wallet=wallet, balance=balance)
 
 
-@app.route("/get_mempool", methods=["GET"])
-def get_mempool():
-    """request the current mempool"""
-    response = {"mempool": blockchain.contracts}
-    return jsonify(response), 200
-
-
 @app.route("/")
 def serve_index():
     return render_template('index.html')
@@ -421,13 +482,6 @@ def serve_index():
 def serve_test():
     return render_template('test.html')
 
-
-@app.route('/post_form', methods=['POST'])
-def process_form():
-    data = request.form
-    print(data['username'])
-    print(data['password'])    
-    return data
 
 
 app.run (host="0.0.0.0", port=5000, debug=True)      # change port to run multiple instances on a single machine for development
