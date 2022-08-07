@@ -8,7 +8,6 @@ ALPHA v0.1
 Updated Botanical blockchain including working cryptography, wallets, transactions, and smartcontracts
 '''
 
-from crypt import methods
 import datetime
 import hashlib
 import json
@@ -154,11 +153,10 @@ class Blockchain:
 
     
     def create_node_dict(self):
-        nodes = self.node
-        nodes.add(this_node)
-        node_dict = {"nodes": ""}
-        for i in range(len(nodes)):
-            node_dict["nodes"][i] = nodes[i]
+        nodes = []
+        nodes.append(self.node)
+        nodes.append(this_node)
+        node_dict = {"nodes": nodes}
         return node_dict
 
 
@@ -170,7 +168,7 @@ class Blockchain:
 
 
     def consensus(self):
-        longest_chain = None
+        longest_chain = []
         max_length = len(self.chain)
         for i in range(len(self.node)):
             get_from = f"{self.node[i]}/get_chain_json"
