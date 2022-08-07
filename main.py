@@ -145,85 +145,6 @@ class Blockchain:
         return True
 
 
-    def add_node(self, address, new_node):
-        """add the address of any nodes to the node set"""
-        if address:
-            parsed_url = urlparse(address)
-            self.node.add(parsed_url.netloc)
-        if new_node:
-            parse_node = urlparse(new_node)
-            self.node.add(parse_node.netloc)
-        self.self_node()
-
-    def replace_chain(self):
-        """replace this machines chain if a node currently holds a longer valid chain"""
-        network = self.node
-        longest_chain = None
-        max_length = len(self.chain)
-        for node in network:
-            response = requests.get(f"http://{node}/get_chain")
-            if response.status_code == 200:
-                length = response.json()["length"]
-                chain = response.json()["chain"]
-                if length > max_length:
-                    if self.is_chain_valid(chain):
-                        max_length = length
-                        longest_chain = chain
-        if longest_chain:
-            self.chain = longest_chain
-            return True
-        return False
-
-    def self_node(self):
-        """make sure this machines address is not in its node set, as will cause infinite loop"""
-        list_of_nodes = tuple(self.node)
-        node_length = len(list_of_nodes)
-        for a in range(node_length):
-            if list_of_nodes[a] == this_node:
-                list_nodes = set(list_of_nodes)
-                list_nodes.remove(this_node)
-                self.node = list_nodes
-                a += 1
-
-    def propagate_node(self, node):
-        """propagate this machines nodes to all machines on the network"""
-        self.self_node()
-        list_of_nodes = tuple(self.node)
-        node_length = len(list_of_nodes)
-        if node_length > 1:
-            for a in range(node_length):
-                deliver_to = "http://" + list_of_nodes[a] + "/receive_propagation"
-                requests.post(url=deliver_to, data=node)
-                a += 1
-                
-    def propagate_mempool(self, transactions):
-        """propagate this machines mempool"""
-        self.self_node()
-        list_of_nodes = tuple(self.node)
-        node_length = len(list_of_nodes)
-        if node_length > 1:
-            for a in range(node_length):
-                deliver_to = "http://" + list_of_nodes[a] + "add_mempool"
-                requests.post(url=deliver_to, data=transactions)
-                a += 1
-
-    def propagate_keys(self, keys, passphrase):
-        self.self_node()
-        list_of_nodes = tuple(self.node)
-        node_length = len(list_of_nodes)
-        data = {'keys': keys, 'passphrase': passphrase}
-        if node_length > 1:
-            for a in range(node_length):
-                deliver_to = "http://" + list_of_nodes[a] + "/recieve_keys"
-                requests.post(url=deliver_to, data=data)
-                a += 1
-
-    def receive_propagation(self, node):
-        """receive the nodes from other machines"""
-        self.node.add(node)
-        self.self_node()
-
-
 class Cryptography:
     
     def __init__(self):
@@ -387,65 +308,8 @@ def is_valid():
     return render_template('is_valid.html', response=response)
 
 
-@app.route("/connect_node", methods=["POST"])
-def connect_node():
-    """
-    request to connect to a node. Only include addresses of other nodes on the system not yourself.
-    POST command formatted as application/json:
-    {
-        "nodes":   ["http://192.168.1.3:5000/",
-                    "http://192.168.1.3:5001/",
-                    "http://192.168.1.3:5002/",]
-    }
-    """
-    data = request.form
-    nodes = data['address']
-    if nodes is None:
-        return "No Node", 400
-    for nodes in nodes:
-        blockchain.add_node(address=nodes, new_node=None)
-    response = {"message": "All nodes Connected. The Botanical Chain now contains the nodes:",
-                "total_nodes": list(blockchain.node)}
-    return jsonify(response), 201
-
-
-@app.route("/propagate_nodes", methods=["GET"])
-def propagate_nodes():
-    """sends this machines current nodes to all other machines on the network"""
-    list_of_nodes = blockchain.node
-    list_of_nodes.add(this_node)
-    list_of_nodes = tuple(list_of_nodes)
-    node_length = len(list_of_nodes)
-    for a in range(node_length):
-        blockchain.propagate_node(list_of_nodes[a])
-        a += 1
-    response = {"message": "Nodes have successfully propagated"}
-    return jsonify(response), 201
-
-
-def propagate_nodes_timer():
-    """automatically sends this machines current nodes to all other machines on the network """
-    list_of_nodes = blockchain.node
-    list_of_nodes.add(this_node)
-    list_of_nodes = tuple(list_of_nodes)
-    node_length = len(list_of_nodes)
-    for a in range(node_length):
-        blockchain.propagate_node(list_of_nodes[a])
-        a += 1
-    print("Nodes have successfully propagated")
-
-
-print("starting propagation timer, checking every minute")
-rt_one = RepeatedTimer(60, propagate_nodes_timer)
-
-
-@app.route("/receive_propagation", methods=["POST"])
-def receive_propagation():
-    """receive data from other machines on the network and update node list"""
-    node = request.data.decode('utf-8')
-    blockchain.receive_propagation(node)
-    response = {"message": "Nodes have successfully propagated"}
-    return jsonify(response), 201
+#print("starting propagation timer, checking every minute")
+#rt_one = RepeatedTimer(60, propagate_nodes_timer)
 
 
 @app.route("/join.html")
@@ -465,39 +329,8 @@ def join_chain():
     return render_template("chain_joined.html")
 
 
-@app.route("/join_chain_int", methods=['POST'])
-def join_chain_int():
-    json = request.get_json(force=True, silent=True, cache=False)
-    new_node = str(json.get("address"))
-    blockchain.add_node(address=None, new_node=new_node)
-    blockchain.propagate_node(new_node)
-    return render_template("chain_joined.html")
-
-
-@app.route("/replace_chain", methods=["GET"])
-def replace_chain():
-    """request to update this machines chain to the longest in the network"""
-    is_chain_replaced = blockchain.replace_chain()
-    if is_chain_replaced:
-        response = {"message": "The node's chain has been replaced with the current longest chain.",
-                    "new_chain": blockchain.chain}
-    else:
-        response = {"message": "The current chain is the longest.",
-                    "actual_chain": blockchain.chain}
-    return jsonify(response), 200
-
-
-def replace_chain_timer():
-    """request to update this machines chain to the longest in the network - triggered automatically"""
-    is_chain_replaced = blockchain.replace_chain()
-    if is_chain_replaced:
-        print(f"The node's chain has been replaced with the current longest chain.")
-    else:
-        print(f"The current chain is the longest.")
-
-
-print("starting consensus timer, checking every 15 seconds")
-rt_two = RepeatedTimer(15, replace_chain_timer)
+#print("starting consensus timer, checking every 15 seconds")
+#rt_two = RepeatedTimer(15, replace_chain_timer)
 
 
 @app.route("/see_nodes.html")
@@ -517,42 +350,12 @@ def generate_wallet():
     data = request.form
     passphrase = str(data["passphrase"])
     wallet, private_key, public_key = cryptography.generate_wallet(passphrase)
-    blockchain.propagate_keys(private_key, passphrase)
     return render_template('new_wallet.html', wallet=wallet, public=public_key.hex(), private=private_key.hex(), passphrase=passphrase)
-
-
-@app.route('/recieve_keys', methods=['POST'])
-def recieve_keys():
-    data = request.data.decode('utf-8')
-    cryptography.generate_key_file(data['keys'], data['passphrase'])
-    return 200
 
 
 @app.route("/send_coins.html")
 def coins():
     return render_template('send_coins.html')
-
-
-@app.route("/add_mempool", methods=["POST"])
-def add_mempool():
-    '''
-    POST command formatted as application/json:
-    {
-        "sender_wallet":    "sender_wallet", 
-        "passphrase":       "passphrase",
-        "reciever_wallet:   "reciever_wallet",
-        "amount":           number
-    }
-    '''
-    json = request.get_json(force=True, silent=True, cache=False)
-    sender_wallet = str(json.get("sender_wallet"))
-    passphrase = str(json.get("passphrase"))
-    reciever_wallet = str(json.get("reciever_wallet"))
-    amount = str(json.get("amount"))
-    sender_keys = cryptography.get_keys_from_wallet(sender_wallet, passphrase)
-    response = contracts.send_coins(sender_keys, reciever_wallet, amount)
-    response["sender_signature"] = str(response["sender_signature"])
-    return 200
 
 
 @app.route("/send_coins", methods=["POST"])
@@ -580,7 +383,6 @@ def send_coins():
                     'reciever_wallet': reciever_wallet,
                     'amount': amount
                     }
-    blockchain.propagate_mempool(transaction)
     return render_template('transaction_successful.html', type=response['type'], ID=response['transaction_ID'], reciever_wallet=response['reciever_wallet'], sender_wallet=response['sender_wallet'], sender_signature=response['sender_signature'], amount=str(response['amount']))
 
 
