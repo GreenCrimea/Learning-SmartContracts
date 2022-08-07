@@ -24,7 +24,7 @@ from Crypto.Signature import pkcs1_15
 import binascii
 
 
-this_node = "192.168.1.107:5000"
+this_node = "192.168.1.102:5000"
 
 
 class RepeatedTimer(object):
@@ -324,7 +324,7 @@ def join_chain():
     blockchain.add_node(address=None, new_node=new_node)
     blockchain.propagate_node(new_node)
     response = {'address': this_node}
-    deliver_to = new_node + "/join_chain_int"
+    deliver_to = new_node + "join_chain_int"
     requests.post(url=deliver_to, data=response)
     return render_template("chain_joined.html")
 
