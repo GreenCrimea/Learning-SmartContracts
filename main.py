@@ -162,25 +162,27 @@ class Blockchain:
 
     def propagate_nodes(self):
         node_dict = self.create_node_dict()
-        for i in range(len(self.node)):
-            post_to = f"{self.node[i]}recieve_nodes/"
-            requests.post(url=post_to, json=node_dict)
+        if len(self.node) > 0:
+            for i in range(len(self.node)):
+                post_to = f"{self.node[i]}recieve_nodes/"
+                requests.post(url=post_to, json=node_dict)
 
 
     def consensus(self):
         longest_chain = []
         max_length = len(self.chain)
-        for i in range(len(self.node)):
-            get_from = f"{self.node[i]}/get_chain_json"
-            response = requests.get(url=get_from)
-            length = response.json()["length"]
-            chain = response.json()["chain"]
-            if length > max_length:
-                if self.is_chain_valid(chain):
-                    max_length = length
-                    longest_chain = chain
-        if len(longest_chain) > len(self.chain):
-            self.chain = longest_chain
+        if len(self.node) > 0:
+            for i in range(len(self.node)):
+                get_from = f"{self.node[i]}/get_chain_json"
+                response = requests.get(url=get_from)
+                length = response.json()["length"]
+                chain = response.json()["chain"]
+                if length > max_length:
+                    if self.is_chain_valid(chain):
+                        max_length = length
+                        longest_chain = chain
+            if len(longest_chain) > len(self.chain):
+                self.chain = longest_chain
 
 
     def push_mempool(self, transaction):
@@ -392,11 +394,11 @@ def is_valid():
 
 
 print("starting propagation timer, checking every minute")
-rt_one = RepeatedTimer(60, blockchain.propagate_nodes())
+rt_one = RepeatedTimer(60, blockchain.propagate_nodes)
 
 
 print("starting consensus timer, checking every 15 seconds")
-rt_two = RepeatedTimer(15, blockchain.consensus())
+rt_two = RepeatedTimer(15, blockchain.consensus)
 
 
 @app.route("/join.html")
