@@ -13,7 +13,7 @@ import datetime
 import hashlib
 import json
 from urllib import response
-from flask import Flask, jsonify, request, render_template
+from flask import Flask, jsonify, request, render_template, send_file
 import requests
 from uuid import uuid4
 from urllib.parse import urlparse
@@ -191,6 +191,15 @@ class Blockchain:
             push_to = f"{self.node[i]}/get_mempool"
             requests.post(url=push_to, json=post_data)
 
+    
+    def send_keys(self, wallet):
+        private_key = open(f"{wallet}-private.pem", 'r').read()
+        public_key = open(f"{wallet}-public.pem", 'r').read()
+        message = {"wallet": wallet, "private_key": private_key, "public_key": public_key}
+        for i in range(len(self.node)):
+            push_to = f"{self.node[i]}/get_keys"
+            requests.post(url=push_to, json=message)
+
 
 
 class Cryptography:
@@ -359,6 +368,20 @@ def get_mempool():
         blockchain.contracts.append(transactions[i])
 
 
+@app.route("/get_keys", methods=['POST'])
+def get_keys():
+    json = request.get_json(force=True, silent=True, cache=False)
+    wallet = json.get("wallet")
+    public_key = json.get("public_key")
+    private_key = json.get("private_key")
+    file_out = open(f"keys/{wallet}-private.pem", "wb")
+    file_out.write(private_key)
+    file_out.close()
+    file_out = open(f"keys/{wallet}-public.pem", "wb")
+    file_out.write(public_key)
+    file_out.close()
+
+
 @app.route("/is_valid.html")
 def is_valid():
     """request if the current chain is valid"""
@@ -417,6 +440,7 @@ def generate_wallet():
     data = request.form
     passphrase = str(data["passphrase"])
     wallet, private_key, public_key = cryptography.generate_wallet(passphrase)
+    blockchain.send_keys(wallet)
     return render_template('new_wallet.html', wallet=wallet, public=public_key.hex(), private=private_key.hex(), passphrase=passphrase)
 
 
