@@ -162,18 +162,22 @@ class Blockchain:
 
     def propagate_nodes(self):
         node_dict = self.create_node_dict()
+        nodes = []
+        nodes.append(self.node)
         if len(self.node) > 0:
             for i in range(len(self.node)):
-                post_to = f"{self.node[i]}recieve_nodes/"
+                post_to = f"{nodes[i]}recieve_nodes/"
                 requests.post(url=post_to, json=node_dict)
 
 
     def consensus(self):
+        nodes = []
+        nodes.append(self.node)
         longest_chain = []
         max_length = len(self.chain)
         if len(self.node) > 0:
             for i in range(len(self.node)):
-                get_from = f"{self.node[i]}/get_chain_json"
+                get_from = f"{nodes[i]}/get_chain_json"
                 response = requests.get(url=get_from)
                 length = response.json()["length"]
                 chain = response.json()["chain"]
@@ -186,18 +190,22 @@ class Blockchain:
 
 
     def push_mempool(self, transaction):
+        nodes = []
+        nodes.append(self.node)
         post_data = {"transaction": transaction}
         for i in range(len(self.node)):
-            push_to = f"{self.node[i]}/get_mempool"
+            push_to = f"{nodes[i]}/get_mempool"
             requests.post(url=push_to, json=post_data)
 
     
     def send_keys(self, wallet):
+        nodes = []
+        nodes.append(self.node)
         private_key = open(f"{wallet}-private.pem", 'r').read()
         public_key = open(f"{wallet}-public.pem", 'r').read()
         message = {"wallet": wallet, "private_key": private_key, "public_key": public_key}
         for i in range(len(self.node)):
-            push_to = f"{self.node[i]}/get_keys"
+            push_to = f"{nodes[i]}/get_keys"
             requests.post(url=push_to, json=message)
 
 
